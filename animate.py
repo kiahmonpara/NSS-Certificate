@@ -3,6 +3,7 @@ import io
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+import pandas as pd
 
 # Load logo image
 logo = Image.open("NSS.png").resize((150, 150))
@@ -343,7 +344,6 @@ def overlay_name_on_template(name, event):
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
     
-    
     img_width, img_height = template_img.size
     x = (img_width - text_width) / 2
     
@@ -370,6 +370,15 @@ def generate_pdf_with_image(name, event):
     buffer.seek(0)
     return buffer
 
+# Check if the name exists in the CSV for NSS Camp 2025
+def is_name_in_csv(name):
+    try:
+        df = pd.read_csv("attendance/camp.csv")
+        return name in df["Name"].values
+    except Exception as e:
+        st.error(f"Error reading CSV file: {e}")
+        return False
+
 def main():
     col1, col2 = st.columns([1, 4])
     with col1:
@@ -381,21 +390,42 @@ def main():
     event = st.selectbox("Select Event", ["NSS Camp 2025", "Stem Cell Donation Drive", "Grain-a-thon 2.0", "Participation"])
     
     if st.button("Generate Certificate"):
-        if user_input:
-            img_with_overlay = overlay_name_on_template(user_input, event)
-            st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)
-            
-            pdf_buffer = generate_pdf_with_image(user_input, event)
-            st.markdown('<div class="stSuccess">Certificate preview generated successfully!</div>', unsafe_allow_html=True)
-            st.download_button(
-                label="Download Certificate PDF",
-                data=pdf_buffer,
-                file_name=f"{user_input}_{event}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        if event == "NSS Camp 2025":
+            if user_input:
+                # Check if the name is present in the CSV
+                if is_name_in_csv(user_input):
+                    img_with_overlay = overlay_name_on_template(user_input, event)
+                    st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)
+                    
+                    pdf_buffer = generate_pdf_with_image(user_input, event)
+                    st.markdown('<div class="stSuccess">Certificate preview generated successfully!</div>', unsafe_allow_html=True)
+                    st.download_button(
+                        label="Download Certificate PDF",
+                        data=pdf_buffer,
+                        file_name=f"{user_input}_{event}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                else:
+                    st.markdown('<div class="stWarning">Name not found in the attendance list for NSS Camp 2025.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="stWarning">Please enter a valid name.</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="stWarning">Please enter a valid name.</div>', unsafe_allow_html=True)
+            if user_input:
+                img_with_overlay = overlay_name_on_template(user_input, event)
+                st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)
+                
+                pdf_buffer = generate_pdf_with_image(user_input, event)
+                st.markdown('<div class="stSuccess">Certificate preview generated successfully!</div>', unsafe_allow_html=True)
+                st.download_button(
+                    label="Download Certificate PDF",
+                    data=pdf_buffer,
+                    file_name=f"{user_input}_{event}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.markdown('<div class="stWarning">Please enter a valid name.</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
