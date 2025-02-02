@@ -1,5 +1,8 @@
 import streamlit as st
 import io
+import smtplib
+import os
+from email.message import EmailMessage
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -43,12 +46,9 @@ temp_css = """
     }
     
     .stTextInput>div>div>input, .stSelectbox>div>div>select {
-        background-color: white;
-        border-radius: 20px;
         font-size: 18px;
         padding: 12px;
         text-align: center;
-        border: 2px solid #a4c1e4;
         color: #4a6fa5;
         transition: 0.3s ease-in-out; /* Added transition */
     }
@@ -92,15 +92,15 @@ temp_css = """
     }
 
     .stSuccess {
-        background-color: rgba(142, 199, 171, 0.8) !important;
+        background-color: rgba(142, 199, 171, 1) !important;
         color: white !important;
-        box-shadow: 0px 0px 10px rgba(142, 199, 171, 0.4);
+        box-shadow: 0px 0px 10px rgba(142, 199, 171, 0.8);
     }
 
     .stWarning {
-        background-color: rgba(231, 129, 109, 0.8) !important;
+        background-color: rgba(231, 129, 109, 1) !important;
         color: white !important;
-        box-shadow: 0px 0px 10px rgba(231, 129, 109, 0.4);
+        box-shadow: 0px 0px 10px rgba(231, 129, 109, 0.8);
     }
 
         /* Animation area */
@@ -138,7 +138,7 @@ temp_css = """
         list-style: none;
         width: 20px;
         height: 20px;
-        background: rgba(255, 255, 255, 0.4);  /* Lighter, more subtle circles */
+        background: rgba(255, 255, 255, 0.8);  /* Lighter, more subtle circles */
         animation: animate 25s linear infinite;
         bottom: -150px;
     }
@@ -256,11 +256,10 @@ temp_css = """
     /* Input Fields with updated colors */
     .stTextInput>div>div>input {
         background-color: #ffffff;
-        border-radius: 20px;
         font-size: 18px;
         padding: 12px;
         text-align: center;
-        border: 2px solid #a4c1e4;  /* Lighter border color */
+        border: 2px solid;  /* Lighter border color */
         color: #4a6fa5;
         transition: 0.3s ease-in-out;
     }
@@ -309,15 +308,15 @@ temp_css = """
     }
 
     .stSuccess {
-        background-color: rgba(142, 199, 171, 0.8) !important;
+        background-color: rgba(142, 199, 171, 1) !important;
         color: white !important;
-        box-shadow: 0px 0px 10px rgba(142, 199, 171, 0.4);
+        box-shadow: 0px 0px 10px rgba(142, 199, 171, 0.8);
     }
 
     .stWarning {
-        background-color: rgba(231, 129, 109, 0.8) !important;
+        background-color: rgba(231, 129, 109, 1) !important;
         color: white !important;
-        box-shadow: 0px 0px 10px rgba(231, 129, 109, 0.4);
+        box-shadow: 0px 0px 10px rgba(231, 129, 109, 0.8);
     }
     </style>
 """
@@ -346,11 +345,7 @@ def overlay_name_on_template(name, event):
     
     img_width, img_height = template_img.size
     x = (img_width - text_width) / 2
-    
-    if event == "Participation":
-        y = (img_height - text_height) / 2 - 140  # Move text more up for Participation
-    else:
-        y = (img_height - text_height) / 2 - 80 
+    y = (img_height - text_height) / 2 - 80 
     
     draw.text((x, y), name, fill=(0, 0, 0), font=font)
     return template_img
@@ -370,62 +365,92 @@ def generate_pdf_with_image(name, event):
     buffer.seek(0)
     return buffer
 
-# Check if the name exists in the CSV for NSS Camp 2025
 def is_name_in_csv(name):
     try:
         df = pd.read_csv("attendance/camp.csv")
-        return name in df["Name"].values
+        df["Name"] = df["Name"].str.strip().str.lower()
+        return name.strip().lower() in df["Name"].values
     except Exception as e:
         st.error(f"Error reading CSV file: {e}")
         return False
 
+def send_email(name, event, email, pdf_buffer):
+    try:
+        template_path = f"email_templates/{event}.txt"
+        if os.path.exists(template_path):
+            with open(template_path, "r") as file:
+                message_body = file.read().format(name=name, event=event)
+        else:
+            message_body = f'Dear {name},\n\nWe are delighted to inform you that your participation in the {event} has been successfully acknowledged. It is our honor to present you with your personalized certificate as a token of your dedication and hard work. Please find your certificate attached to this email.\n\nThe National Service Scheme (NSS) is driven by the powerful motto: "Not Me But You". This principle emphasizes selfless service to society, fostering a spirit of volunteerism and community development. Through your participation, you have embodied this noble ideal, making a positive impact on the lives of those around you.\nYour commitment and contribution to this cause are truly commendable. By taking part in {event}, you have not only gained invaluable experiences but also contributed to a collective effort to bring about positive change. Your involvement strengthens the spirit of service that NSS stands for, and we are grateful for your willingness to dedicate your time and effort toward creating a better world.\n\nAs you receive this certificate, know that it represents not just your hard work but also the spirit of giving, compassion, and solidarity that the NSS upholds. We deeply appreciate your involvement and hope this experience inspires you to continue your journey of service and compassion.\n\nThank you once again for your outstanding participation. We look forward to your continued involvement in future NSS activities. Together, we can make a meaningful difference.\n\nAs you receive this certificate, know that it represents not just your hard work but also the spirit of giving, compassion, and solidarity that the NSS upholds. We deeply appreciate your involvement and hope this experience inspires you to continue your journey of service and compassion.\n\nThank you once again for your outstanding participation. We look forward to your continued involvement in future NSS activities. Together, we can make a meaningful difference.\n\nWarm regards,\nThe DJSNSS Team'
+        
+        msg = EmailMessage()
+        msg['Subject'] = f"Your Certificate for {event}"
+        msg['From'] = "djsnss2025@gmail.com"  # Change this to your email
+        msg['To'] = email
+        msg.set_content(message_body)
+        
+        pdf_data = pdf_buffer.getvalue()
+        msg.add_attachment(pdf_data, maintype='application', subtype='pdf', filename=f"{name}_{event}.pdf")
+        
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login("djsnss2025@gmail.com", "vqnu yshn ibhd eusx")
+            server.send_message(msg)
+
+    except Exception as e:
+        st.error(f"Error sending email: {e}")
+def is_name_in_csv(name, event):
+    try:
+        # Load the CSV specific to the event
+        file_path = f"attendance/{event.lower().replace(' ', '_')}.csv"  # Assuming the CSV is named based on event
+        df = pd.read_csv(file_path)
+        df["Name"] = df["Name"].str.strip().str.lower()
+        return name.strip().lower() in df["Name"].values
+    except Exception as e:
+        st.error(f"Error reading CSV file for {event}: {e}")
+        return None  # None indicates an issue with the CSV file or the event not being configured
 def main():
     col1, col2 = st.columns([1, 4])
     with col1:
         st.image(logo, width=120)
     with col2:
-        st.markdown('<div class="custom-title">DJS NSS Event</div>', unsafe_allow_html=True)
+        st.markdown('<div class="custom-title">DJS NSS Certificates</div>', unsafe_allow_html=True)
     
     user_input = st.text_input("Enter your full name:", key="name_input").strip().title()
+    email_input = st.text_input("Enter your email:", key="email_input").strip()
     event = st.selectbox("Select Event", ["NSS Camp 2025", "Stem Cell Donation Drive", "Grain-a-thon 2.0", "Participation"])
     
     if st.button("Generate Certificate"):
-        if event == "NSS Camp 2025":
-            if user_input:
-                # Check if the name is present in the CSV
-                if is_name_in_csv(user_input):
-                    img_with_overlay = overlay_name_on_template(user_input, event)
-                    st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)
-                    
-                    pdf_buffer = generate_pdf_with_image(user_input, event)
-                    st.markdown('<div class="stSuccess">Certificate preview generated successfully!</div>', unsafe_allow_html=True)
-                    st.download_button(
-                        label="Download Certificate PDF",
-                        data=pdf_buffer,
-                        file_name=f"{user_input}_{event}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                else:
-                    st.markdown('<div class="stWarning">Name not found in the attendance list for NSS Camp 2025.</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="stWarning">Please enter a valid name.</div>', unsafe_allow_html=True)
+        if user_input and email_input:
+            # Generalized check for attendance list
+            name_status = is_name_in_csv(user_input, event)
+            if name_status is None:  # If the CSV file doesn't exist or there's an issue
+                st.warning("⚠️ We have a delay for this event. Please try again after some time.")
+                return
+            if not name_status:  # If the name is not found in the attendance list
+                st.warning(f"⚠️ Name not found in the attendance list for {event}.")
+                return
+            # Generate the certificate
+            img_with_overlay = overlay_name_on_template(user_input, event)
+            st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)            
+            # Generate PDF with the certificate image
+            pdf_buffer = generate_pdf_with_image(user_input, event)
+            # Show success message and download button
+            st.success("Certificate preview generated successfully!")
+            st.download_button(
+                label="Download Certificate PDF",
+                data=pdf_buffer,
+                file_name=f"{user_input}_{event}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+            send_email(user_input, event, email_input, pdf_buffer)
+            st.success("📨 You will receive the certificate on your email shortly. Please be patient.")
+            
         else:
-            if user_input:
-                img_with_overlay = overlay_name_on_template(user_input, event)
-                st.image(img_with_overlay, caption="Generated Certificate", use_container_width=True)
-                
-                pdf_buffer = generate_pdf_with_image(user_input, event)
-                st.markdown('<div class="stSuccess">Certificate preview generated successfully!</div>', unsafe_allow_html=True)
-                st.download_button(
-                    label="Download Certificate PDF",
-                    data=pdf_buffer,
-                    file_name=f"{user_input}_{event}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            else:
-                st.markdown('<div class="stWarning">Please enter a valid name.</div>', unsafe_allow_html=True)
+            st.warning("⚠️ Please enter a valid name and email.")
 
 if __name__ == "__main__":
     main()
